@@ -168,8 +168,30 @@ def build_signal(symbol: str = "BTC/USDT", timeframe: str = "5m"):
             direction = "FLAT"
         elif boll_position == "below_lower":
             direction = "FLAT"
+                elif boll_position == "below_lower":
+            direction = "FLAT"
+
+                elif boll_position == "below_lower":
+            direction = "FLAT"
+
+    entry = close_price
+    volatility = abs(result["volatility"])
+    price_move = entry * volatility
+
+    stop_loss = None
+    take_profit = None
+
+    if direction == "LONG":
+        stop_loss = entry - price_move * 1.5
+        take_profit = entry + price_move * 3.0
+    elif direction == "SHORT":
+        stop_loss = entry + price_move * 1.5
+        take_profit = entry - price_move * 3.0
 
     signal = {
+        "entry": round(entry, 4),
+        "stop_loss": round(stop_loss, 4) if stop_loss is not None else None,
+        "take_profit": round(take_profit, 4) if take_profit is not None else None,
         "symbol": symbol,
         "timeframe": timeframe,
         "direction": direction,
