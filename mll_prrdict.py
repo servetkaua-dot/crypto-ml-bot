@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import ccxt
+import requests
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
@@ -70,17 +71,6 @@ def save_signal_journal(signal: Dict[str, Any], path: str = SIGNAL_LOG_FILE) -> 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(logs, f, ensure_ascii=False, indent=2)
 
-def fetch_funding_rate(symbol="BTC/USDT"):
-    try:
-        exchange = ccxt.binanceusdm()
-        market = symbol.replace("/", "")
-        data = exchange.fapiPublicGetFundingRate({
-            "symbol": market,
-            "limit": 1
-        })
-        return float(data[-1]["fundingRate"])
-    except Exception:
-        return 0.0
 def fetch_data(symbol: str = "BTC/USDT", timeframe: str = "5m", limit: int = 250) -> pd.DataFrame:
     """Fetch OHLCV from Binance via ccxt."""
     exchange = ccxt.binance({"enableRateLimit": True})
@@ -95,8 +85,28 @@ def fetch_data(symbol: str = "BTC/USDT", timeframe: str = "5m", limit: int = 250
     for col in ["open", "high", "low", "close", "volume"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    return df.dropna().reset_index(drop=True)
+    return df.dropna().reset_index(drop=True) 
+    
+def fetch_funding_rate(symbol="BTCUSDT"):
+    try:
+        url = "https://fapi.binance.com/fapi/v1/fundingRate"
+        
+        params = {
+            "symbol": symbol.replace("/", ""),
+            "limit": 1
+        }
 
+        r = requests.get(url, params=params, timeout=10)
+
+        data = r.json()
+
+        if isinstance(data, list) and len(data) > 0:
+            return float(data[-1]["fundingRate"])
+
+        return 0.0
+
+    except Exception:
+        return 0.0
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """Add indicators used by ML and rule engine."""
@@ -233,6 +243,13 @@ def build_liquidity_heatmap(df: pd.DataFrame, close_price: float, lookback: int 
         liq_bias = "UP"
     else:
         liq_bias = "NEUTRAL"
+        funding_bias = "NEUTRAL"
+
+if funding_rate > 0.0001:
+    funding_bias = "LONG_CROWDED"
+
+elif funding_rate < -0.0001:
+    funding_bias = "SHORT_CROWDED"
 
     return {
         "liq_above": round(recent_high, 4),
@@ -261,6 +278,7 @@ def build_signal(symbol: str = "BTC/USDT", timeframe: str = "5m") -> Dict[str, A
 
     confidence = float(result["confidence"])
     close_price = float(result["close"])
+    funding_rate = fetch_funding_rate(symbol)
     returns = float(result["returns"])
     volatility = abs(float(result["volatility"]))
     volume_ratio = float(result["volume_ratio"])
@@ -374,8 +392,15 @@ def build_signal(symbol: str = "BTC/USDT", timeframe: str = "5m") -> Dict[str, A
             and liq_bias != "UP"
         ):
             direction = "SHORT"
+            if direction == "LONG":
+    if funding_bias == "LONG_CROWDED" and confidence < 0.80:
+        direction = "FLAT"
 
-    elif market_mode == "BREAKOUT":
+if direction == "SHORT":
+    if funding_bias == "SHORT_CROWDED" and confidence < 0.80:
+        direction = "FLAT"
+
+    if market_mode == "BREAKOUT":
         if strong_move_up and confidence >= breakout_confidence and htf_trend != "DOWN":
             direction = "LONG"
         elif strong_move_down and confidence >= breakout_confidence and htf_trend != "UP":
