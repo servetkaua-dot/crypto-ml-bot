@@ -70,7 +70,17 @@ def save_signal_journal(signal: Dict[str, Any], path: str = SIGNAL_LOG_FILE) -> 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(logs, f, ensure_ascii=False, indent=2)
 
-
+def fetch_funding_rate(symbol="BTC/USDT"):
+    try:
+        exchange = ccxt.binanceusdm()
+        market = symbol.replace("/", "")
+        data = exchange.fapiPublicGetFundingRate({
+            "symbol": market,
+            "limit": 1
+        })
+        return float(data[-1]["fundingRate"])
+    except Exception:
+        return 0.0
 def fetch_data(symbol: str = "BTC/USDT", timeframe: str = "5m", limit: int = 250) -> pd.DataFrame:
     """Fetch OHLCV from Binance via ccxt."""
     exchange = ccxt.binance({"enableRateLimit": True})
