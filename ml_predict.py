@@ -21,6 +21,9 @@ import requests
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
+import joblib
+import os
+
 
 SIGNAL_LOG_FILE = "signals_journal.json"
 LEARNING_FILE = "learning.json"
@@ -273,8 +276,17 @@ def build_signal(symbol: str = "BTC/USDT", timeframe: str = "5m") -> Dict[str, A
 
     # === 2. ML ===
     model = MLModel()
-    model.train(df)
-    result = model.predict(df)
+
+    import os
+    import joblib
+
+    if os.path.exists("model.pkl"):
+        model.model = joblib.load("model.pkl")
+    else:
+        model.train(df)
+        joblib.dump(model.model, "model.pkl")
+
+result = model.predict(df)
 
     confidence = float(result["confidence"])
     close_price = float(result["close"])
